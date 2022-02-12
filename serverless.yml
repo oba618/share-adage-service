@@ -1,0 +1,129 @@
+service: share-adage-service
+
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: python3.8
+  lambdaHashingVersion: 20201221
+  stage: dev
+  region: ap-northeast-1
+  environment:
+    COGNITO_CLIENT_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoClientId}
+    COGNITO_USER_POOL_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolId}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "*"
+      Resource:
+        - "*"
+
+package:
+  exclude:
+    - .pytest_cache/**
+    - .envrc
+    - .serverless/**
+    - .vscode/**
+    - functions/_pycache_
+    - tests/**
+    - conf/**
+
+custom:
+  otherfile:
+    environment:
+      dev: ${file(./conf/dev.yml)}
+  authorizer:
+    arn: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolArn}
+
+layers:
+  common:
+    path: layer
+    name: common
+
+resources:
+  - ${file(conf/dynamodb.yml)}
+
+functions:
+  adageGet:
+    handler: functions/adage.get
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage
+          method: get
+  adagePost:
+    handler: functions/adage.post
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage
+          method: post
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  adagePatch:
+    handler: functions/adage.patch
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/{adageId}
+          method: patch
+          cors: true
+
+  userPost:
+    handler: functions/user.post
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: post
+          cors: true
+  userConfirm:
+    handler: functions/user.confirm
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/confirm
+          method: post
+          cors: true
+  userLogin:
+    handler: functions/user.login
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/login
+          method: post
+          cors: true
+  userSendResetPasswordCode:
+    handler: functions/user.send_reset_password_code
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/sendResetPasswordCode
+          method: post
+          cors: true
+  userResetPassword:
+    handler: functions/user.reset_password
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/resetPassword
+          method: post
+          cors: true
+  userDelete:
+    handler: functions/user.delete
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: delete
+          authorizer: ${self:custom.authorizer}
+          cors: true

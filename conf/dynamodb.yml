@@ -1,0 +1,52 @@
+Resources:
+  adagesTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: adagesTable
+      AttributeDefinitions:
+      - AttributeName: adageId
+        AttributeType: S
+      - AttributeName: registrationMonth
+        AttributeType: N
+      KeySchema:
+      - AttributeName: adageId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      GlobalSecondaryIndexes:
+        - IndexName: registrationMonth-Index
+          KeySchema:
+            - AttributeName: registrationMonth
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+  usersTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: usersTable
+      AttributeDefinitions:
+      - AttributeName: userId
+        AttributeType: S
+      - AttributeName: loginId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: userId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      GlobalSecondaryIndexes:
+        - IndexName: loginId-Index
+          KeySchema:
+            - AttributeName: loginId
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
