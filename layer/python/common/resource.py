@@ -6,6 +6,7 @@ import os
 COGNITO_CLIENT_ID = os.environ['COGNITO_CLIENT_ID']
 COGNITO_USER_POOL_ID = os.environ['COGNITO_USER_POOL_ID']
 
+TABLE_NAME_PREFIX = os.environ['TABLE_NAME_PREFIX']
 
 class Cognito:
 
@@ -77,5 +78,5 @@ class Table(Enum):
         obj = boto3.resource('dynamodb').Table(table_name)
         return obj
 
-    ADAGE = 'adagesTable'
-    USER = 'usersTable'
+    ADAGE = TABLE_NAME_PREFIX + 'adagesTable'
+    USER = TABLE_NAME_PREFIX + 'usersTable'
