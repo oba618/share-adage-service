@@ -6,11 +6,12 @@ provider:
   name: aws
   runtime: python3.8
   lambdaHashingVersion: 20201221
-  stage: dev
+  stage: ${opt:stage, self:custome.defaultStage}
   region: ap-northeast-1
   environment:
     COGNITO_CLIENT_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoClientId}
     COGNITO_USER_POOL_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolId}
+    TABLE_NAME_PREFIX: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -29,19 +30,21 @@ package:
     - conf/**
 
 custom:
+  defaultStage: to
   otherfile:
     environment:
       dev: ${file(./conf/dev.yml)}
+      to: ${file(./conf/to.yml)}
   authorizer:
     arn: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolArn}
 
 layers:
   common:
     path: layer
-    name: common
+    name: ${self:service}-${self:provider.stage}-common
 
 resources:
-  - ${file(conf/dynamodb.yml)}
+  - ${file(serverless/dynamodb.yml)}
 
 functions:
   adageGet:

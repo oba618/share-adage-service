@@ -1,3 +1,4 @@
 .envrc
+.serverless
 .vscode
-conf/dev.yml
+conf

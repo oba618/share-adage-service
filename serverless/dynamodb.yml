@@ -2,7 +2,7 @@ Resources:
   adagesTable:
     Type: 'AWS::DynamoDB::Table'
     Properties:
-      TableName: adagesTable
+      TableName: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}adagesTable
       AttributeDefinitions:
       - AttributeName: adageId
         AttributeType: S
@@ -28,7 +28,7 @@ Resources:
   usersTable:
     Type: 'AWS::DynamoDB::Table'
     Properties:
-      TableName: usersTable
+      TableName: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}usersTable
       AttributeDefinitions:
       - AttributeName: userId
         AttributeType: S
