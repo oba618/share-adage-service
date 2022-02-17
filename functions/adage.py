@@ -66,13 +66,20 @@ def post(event, context):
     """
     month = datetime.now().month
     body = json.loads(event['body'])
+    adage_id = str(uuid4())
+    title = body['title']
+    episode = body.get('episode')
 
-    response = post_adage(body['title'], month)
-    print(response)
+    # 格言登録
+    post_adage(adage_id,title, month)
+    response_body = {'title': title}
 
-    return PostResponse(
-        {'title': body['title']},
-    )
+    # エピソードも含まれる場合
+    if not is_empty(episode):
+        invoke_lambda_post_episode(adage_id, episode)
+        response_body['episode'] = episode
+
+    return PostResponse(response_body)
 
 
 @handler
@@ -111,10 +118,11 @@ def get_adage(month: int) -> list:
     return [] if is_empty(item.get('Items')) else item['Items']
 
 
-def post_adage(title: str, month: int) -> dict:
+def post_adage(adage_id: str, title: str, month: int) -> dict:
     """格言を登録
 
     Args:
+        adage_id (str): 格言ID
         title (str): タイトル
         month (int): 今月の値
 
@@ -123,11 +131,40 @@ def post_adage(title: str, month: int) -> dict:
     """
     return table_adage.put_item(
         Item={
-            'adageId': str(uuid4()),
+            'adageId': adage_id,
+            'key': 'title',
             'title': title,
             'likePoints': 0,
             'registrationMonth': month,
         },
+    )
+
+
+def invoke_lambda_post_episode(adage_id: str, episode: str) -> dict:
+    """エピソード登録関数呼び出し
+
+    Args:
+        adage_id (str): 格言ID
+        episode (str): エピソード
+
+    Returns:
+        dict: 結果
+    """
+    client = boto3.client('lambda')
+    payload = json.dumps(
+        {
+            'body': json.dumps(
+                {
+                    'adageId': adage_id,
+                    'episode': episode,
+                },
+            ),
+        },
+    )
+
+    return client.invoke(
+        FunctionName='share-adage-service-to-episodePost',
+        Payload=payload,
     )
 
 
@@ -140,6 +177,7 @@ def patch_adage(adage_id: str):
     return table_adage.update_item(
         Key= {
             'adageId': adage_id,
+            'key': 'title',
         },
         UpdateExpression="ADD #likePoints :increment",
         ExpressionAttributeNames={

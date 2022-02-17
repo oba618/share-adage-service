@@ -6,7 +6,7 @@ provider:
   name: aws
   runtime: python3.8
   lambdaHashingVersion: 20201221
-  stage: ${opt:stage, self:custome.defaultStage}
+  stage: ${opt:stage, self:custom.defaultStage}
   region: ap-northeast-1
   environment:
     COGNITO_CLIENT_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoClientId}
@@ -73,6 +73,17 @@ functions:
       - http:
           path: /adage/{adageId}
           method: patch
+          cors: true
+
+  episodePost:
+    handler: functions/episode.post
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /episode
+          method: post
+          authorizer: ${self:custom.authorizer}
           cors: true
 
   userPost:
