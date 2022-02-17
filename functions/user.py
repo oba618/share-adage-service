@@ -54,6 +54,7 @@ def post(event, context):
     # ユーザ登録(dynamoDB)
     item = {
         'userId': response['UserSub'],
+        'key': 'userId',
         'loginId': login_id,
     }
     table_user.put_item(Item=item)
@@ -162,7 +163,10 @@ def delete(event, context):
     body = json.loads(event['body'])
 
     user = table_user.get_item(
-        Key={'userId': sub},
+        Key={
+            'userId': sub,
+            'key': 'userId',
+        },
     )
 
     if is_empty(user.get('Item')):
@@ -180,7 +184,10 @@ def delete(event, context):
 
     # DynamoDBユーザ削除
     table_user.delete_item(
-        Key={'userId': user['Item']['userId']},
+        Key={
+            'userId': user['Item']['userId'],
+            'key': 'userId',
+        },
     )
 
     # Cognitoユーザ削除

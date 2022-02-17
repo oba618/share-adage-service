@@ -6,11 +6,15 @@ Resources:
       AttributeDefinitions:
       - AttributeName: adageId
         AttributeType: S
+      - AttributeName: key
+        AttributeType: S
       - AttributeName: registrationMonth
         AttributeType: N
       KeySchema:
       - AttributeName: adageId
         KeyType: HASH
+      - AttributeName: key
+        KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
@@ -32,11 +36,15 @@ Resources:
       AttributeDefinitions:
       - AttributeName: userId
         AttributeType: S
+      - AttributeName: key
+        AttributeType: S
       - AttributeName: loginId
         AttributeType: S
       KeySchema:
       - AttributeName: userId
         KeyType: HASH
+      - AttributeName: key
+        KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
