@@ -41,7 +41,18 @@ def get(event, context):
             'title': adage['title'],
             'registrationMonth': int(adage['registrationMonth']),
             'likePoints': int(adage['likePoints']),
+            'episode': [],
         }
+
+        adage_episode = table_adage.get_item(
+            Key={
+                'adageId': adage['adageId'],
+                'key': 'episode',
+            },
+        )
+        if not is_empty(adage_episode.get('Item')):
+            body['episode'] = adage_episode['Item'].get('episode')
+
         _adage_list.append(body)
 
     # いいねポイントで降順にソート
