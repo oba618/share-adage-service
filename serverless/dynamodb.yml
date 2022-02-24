@@ -54,7 +54,9 @@ Resources:
             - AttributeName: loginId
               KeyType: HASH
           Projection:
-            ProjectionType: KEYS_ONLY
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - userName
           ProvisionedThroughput:
             ReadCapacityUnits: 1
             WriteCapacityUnits: 1

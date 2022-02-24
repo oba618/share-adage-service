@@ -12,6 +12,7 @@ provider:
     COGNITO_CLIENT_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoClientId}
     COGNITO_USER_POOL_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolId}
     TABLE_NAME_PREFIX: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}
+    LAMBDA_STAGE: ${self:custom.otherfile.environment.${self:provider.stage}.lambdaStage}
   iamRoleStatements:
     - Effect: "Allow"
       Action:

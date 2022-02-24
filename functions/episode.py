@@ -5,9 +5,11 @@ from common.resource import Table
 from common.response import Response
 from common.util import is_empty
 from common.exception import ApplicationException
+from common.response import PostResponse
 
 
 table_adage = Table.ADAGE
+table_user = Table.USER
 
 
 @handler
@@ -22,51 +24,114 @@ def post(event, context):
         Response: レスポンス
     """
     body = json.loads(event['body'])
-    adage_id = body['adageId']
-    episode = body['episode']
 
+    # 必須項目チェック
+    adage_id = body.get('adageId')
+    episode = body.get('episode')
     if is_empty(adage_id or episode):
         raise ApplicationException(
             HTTPStatus.FORBIDDEN,
             'adageId and episode is required.',
         )
 
-    adage_title = table_adage.get_item(
-        Key={
-            'adageId': adage_id,
-            'key': 'title',
-        },
-    )
-
-    if is_empty(adage_title.get('Item')):
+    # 既存格言チェック
+    adage_title = get_adage(adage_id, 'title')
+    if is_empty(adage_title):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            f'Dose not exists. adageId: {adage_id}',
+            f'Title of adage does not exists. adageId: {adage_id}',
         )
 
-    exists_episode = table_adage.get_item(
+    # 既存ユーザチェック
+    user_id = body.get('userId')
+    if is_empty(user_id):
+        user_id = event['requestContext']['authorizer']['claims']['sub']
+
+    exists_user = get_user(user_id)
+    if is_empty(exists_user):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            f'User does not exists. userId: {user_id}',
+        )
+
+    # エピソード登録
+    episode_list = [
+        {
+            'userId': exists_user['userId'],
+            'userName': exists_user['userName'],
+            'episode': episode,
+        },
+    ]
+    exists_episode = get_adage(adage_id, 'episode')
+    if not is_empty(exists_episode.get('episode')):
+        episode_list.extend(exists_episode['episode'])
+
+    body = {
+        'adageId': adage_id,
+        'key': 'episode',
+        'episode': episode_list,
+    }
+    table_adage.put_item(Item=body)
+
+    return PostResponse(body)
+
+
+def get_adage(adage_id: str, key: str) -> dict:
+    """格言取得
+
+    Args:
+        adage_id (str): 格言ID
+        key (str): ソートキー
+
+    Returns:
+        dict: 格言情報
+    """
+    item = table_adage.get_item(
         Key={
             'adageId': adage_id,
-            'key': 'episode',
-        }
-    )
-
-    episode_list = [episode]
-
-    if not is_empty(exists_episode.get('Item')):
-        episode_list.extend(exists_episode['Item']['episode'])
-
-    table_adage.put_item(
-        Item={
-            'adageId': adage_id,
-            'key': 'episode',
-            'episode': episode_list,
+            'key': key,
         },
     )
 
-    return Response(
-        {
-            'adageId': adage_id,
-            'episode': episode_list,
+    return {} if is_empty(item.get('Item')) else item['Item']
+
+
+def get_user(sub: str) -> dict:
+    """ユーザ取得
+
+    Args:
+        sub (str): ユーザID
+
+    Returns:
+        dict: ユーザ情報
+    """
+    item = table_user.get_item(
+        Key={
+            'userId': sub,
+            'key': 'userId',
         },
     )
+
+    return {} if is_empty(item.get('Item')) else item['Item']
+
+
+def get_user_name(user_id: str) -> str:
+    """ユーザ名を取得
+
+    Args:
+        user_id (str): ユーザID
+
+    Returns:
+        str: ユーザ名
+    """
+    item = table_user.get_item(
+        Key={
+            'userId': user_id,
+            'key': 'userId',
+        },
+        ProjectionExpression='userName',
+    )
+
+    user_info = {} if is_empty(item.get('Item')) else item['Item']
+
+    return {} if is_empty(user_info.get('userName')) else user_info['userName']

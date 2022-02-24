@@ -56,6 +56,7 @@ def post(event, context):
         'userId': response['UserSub'],
         'key': 'userId',
         'loginId': login_id,
+        'userName': 'No name',
     }
     table_user.put_item(Item=item)
 
@@ -93,21 +94,47 @@ def confirm(event, context):
 
 @handler
 def login(event, context):
+    """ユーザ認証、IDトークン発行
+
+    Raises:
+        ApplicationException: メールアドレスが違う場合、パスワードが違う場合
+
+    Returns:
+        PostResponse: IDトークン, アクセストークン
+    """
     body = json.loads(event['body'])
+    login_id = body.get('loginId')
+    password = body.get('password')
+
+    if is_empty(login_id or password):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            'Mail address and Password is required',
+        )
 
     # ログイン
     cognito = Cognito()
-    response = cognito.initiate_auth(
-        AuthParameters={
-            'USERNAME': body['loginId'],
-            'PASSWORD': body['password'],
-        },
-    )
+
+    try:
+        response = cognito.initiate_auth(
+            AuthParameters={
+                'USERNAME': login_id,
+                'PASSWORD': password,
+            },
+        )
+    except ClientError as e:
+        print(e.response)
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            e.response['Error']['Message'],
+        )
 
     return PostResponse(
         {
             'idToken': response['AuthenticationResult']['IdToken'],
             'accessToken': response['AuthenticationResult']['AccessToken'],
+            'refreshToken': response['AuthenticationResult']['RefreshToken'],
+            'userName': get_user_name(login_id),
         },
     )
 
@@ -128,7 +155,7 @@ def send_reset_password_code(event, context):
     if is_empty(user['Items']):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST.value,
-            f'User dose not exists. loginId: {login_id}'
+            f'User does not exists. loginId: {login_id}'
         )
 
     # 再設定コード送信
@@ -172,7 +199,7 @@ def delete(event, context):
     if is_empty(user.get('Item')):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            'User dose not exists',
+            'User does not exists',
         )
 
     login_id = body.get('loginId')
@@ -197,3 +224,23 @@ def delete(event, context):
     )
 
     return Response({})
+
+
+def get_user_name(login_id: str) -> str:
+    """ユーザ名取得
+
+    Args:
+        login_id (str): ログインID
+
+    Returns:
+        str: ユーザ名
+    """
+    item = table_user.query(
+        IndexName='loginId-Index',
+        KeyConditionExpression=Key('loginId').eq(login_id),
+        ProjectionExpression='userName',
+    )
+
+    return '' \
+        if is_empty(item.get('Items', [{}])[0].get('userName')) \
+        else item['Items'][0]['userName']

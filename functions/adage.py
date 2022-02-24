@@ -14,6 +14,7 @@ from common.response import (
 from common.decorator import handler
 from common.resource import Table
 from common.util import is_empty
+from common.const import LAMBDA_STAGE
 
 
 table_adage = Table.ADAGE
@@ -75,22 +76,29 @@ def post(event, context):
     Returns:
         PostResponse: レスポンス
     """
-    month = datetime.now().month
-    body = json.loads(event['body'])
+    sub = event['requestContext']['authorizer']['claims']['sub']
     adage_id = str(uuid4())
-    title = body['title']
-    episode = body.get('episode')
+
+    body = json.loads(event['body'])
+    episode = body.get('episode', '')
 
     # 格言登録
-    post_adage(adage_id,title, month)
-    response_body = {'title': title}
+    body = {
+        'adageId': adage_id,
+        'key': 'title',
+        'title': body['title'],
+        'likePoints': 0,
+        'registrationMonth': datetime.now().month,
+    }
+    table_adage.put_item(Item=body)
 
     # エピソードも含まれる場合
     if not is_empty(episode):
-        invoke_lambda_post_episode(adage_id, episode)
-        response_body['episode'] = episode
+        invoke_lambda_post_episode(adage_id, sub, episode)
 
-    return PostResponse(response_body)
+    body['episode'] = episode
+
+    return PostResponse(body)
 
 
 @handler
@@ -129,53 +137,33 @@ def get_adage(month: int) -> list:
     return [] if is_empty(item.get('Items')) else item['Items']
 
 
-def post_adage(adage_id: str, title: str, month: int) -> dict:
-    """格言を登録
-
-    Args:
-        adage_id (str): 格言ID
-        title (str): タイトル
-        month (int): 今月の値
-
-    Returns:
-        dict: 登録結果
-    """
-    return table_adage.put_item(
-        Item={
-            'adageId': adage_id,
-            'key': 'title',
-            'title': title,
-            'likePoints': 0,
-            'registrationMonth': month,
-        },
-    )
-
-
-def invoke_lambda_post_episode(adage_id: str, episode: str) -> dict:
+def invoke_lambda_post_episode(
+        adage_id: str, user_id: str, episode: str) -> dict:
     """エピソード登録関数呼び出し
 
     Args:
         adage_id (str): 格言ID
+        user_id (str): ユーザID
         episode (str): エピソード
 
     Returns:
         dict: 結果
     """
     client = boto3.client('lambda')
-    payload = json.dumps(
-        {
-            'body': json.dumps(
-                {
-                    'adageId': adage_id,
-                    'episode': episode,
-                },
-            ),
-        },
-    )
 
     return client.invoke(
-        FunctionName='share-adage-service-to-episodePost',
-        Payload=payload,
+        FunctionName=f'share-adage-service-{LAMBDA_STAGE}-episodePost',
+        Payload=json.dumps(
+            {
+                'body': json.dumps(
+                    {
+                        'adageId': adage_id,
+                        'episode': episode,
+                        'userId': user_id,
+                    },
+                ),
+            },
+        ),
     )
 
 
