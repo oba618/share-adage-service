@@ -1,20 +1,21 @@
 from datetime import datetime
 from decimal import Decimal
+from http import HTTPStatus
 import json
-from random import randint
 from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Key
+
+from common.const import LAMBDA_STAGE
+from common.decorator import handler
+from common.exception import ApplicationException
+from common.resource import Table
 from common.response import (
-    ErrorResponse,
     PostResponse,
     Response,
 )
-from common.decorator import handler
-from common.resource import Table
 from common.util import is_empty
-from common.const import LAMBDA_STAGE
 
 
 table_adage = Table.ADAGE
@@ -23,10 +24,6 @@ table_adage = Table.ADAGE
 @handler
 def get(event, context):
     """格言を参照する
-
-    Args:
-        event (dict): イベント
-        context (__main__.LambdaContext): コンテキスト
 
     Returns:
         Response: レスポンス
@@ -45,14 +42,12 @@ def get(event, context):
             'episode': [],
         }
 
-        adage_episode = table_adage.get_item(
-            Key={
-                'adageId': adage['adageId'],
-                'key': 'episode',
-            },
+        adage_episode = table_adage.query(
+            KeyConditionExpression=Key('adageId').eq(adage['adageId']) &
+                Key('key').begins_with('episode'),
         )
-        if not is_empty(adage_episode.get('Item')):
-            body['episode'] = adage_episode['Item'].get('episode')
+        if not is_empty(adage_episode.get('Items')):
+            body['episode'] = adage_episode['Items']
 
         _adage_list.append(body)
 
@@ -69,9 +64,8 @@ def get(event, context):
 def post(event, context):
     """格言登録
 
-    Args:
-        event (dict): イベント
-        context (dict): コンテキスト
+    Raise:
+        ApplicationException: 必須項目が空の場合
 
     Returns:
         PostResponse: レスポンス
@@ -80,13 +74,21 @@ def post(event, context):
     adage_id = str(uuid4())
 
     body = json.loads(event['body'])
+    adage_title = body.get('title')
     episode = body.get('episode', '')
+
+    # 必須項目チェック
+    if is_empty(adage_title):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            'Title is required.',
+        )
 
     # 格言登録
     body = {
         'adageId': adage_id,
         'key': 'title',
-        'title': body['title'],
+        'title': adage_title,
         'likePoints': 0,
         'registrationMonth': datetime.now().month,
     }

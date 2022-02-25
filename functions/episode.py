@@ -55,21 +55,12 @@ def post(event, context):
         )
 
     # エピソード登録
-    episode_list = [
-        {
-            'userId': exists_user['userId'],
-            'userName': exists_user['userName'],
-            'episode': episode,
-        },
-    ]
-    exists_episode = get_adage(adage_id, 'episode')
-    if not is_empty(exists_episode.get('episode')):
-        episode_list.extend(exists_episode['episode'])
-
     body = {
         'adageId': adage_id,
-        'key': 'episode',
-        'episode': episode_list,
+        'key': 'episode#' + user_id,
+        'userId': user_id,
+        'userName': exists_user['userName'],
+        'episode': episode,
     }
     table_adage.put_item(Item=body)
 
