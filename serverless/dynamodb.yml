@@ -10,6 +10,8 @@ Resources:
         AttributeType: S
       - AttributeName: registrationMonth
         AttributeType: N
+      - AttributeName: userId
+        AttributeType: S
       KeySchema:
       - AttributeName: adageId
         KeyType: HASH
@@ -25,6 +27,15 @@ Resources:
               KeyType: HASH
           Projection:
             ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        - IndexName: userId-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY 
           ProvisionedThroughput:
             ReadCapacityUnits: 1
             WriteCapacityUnits: 1

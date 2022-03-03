@@ -12,6 +12,7 @@ from common.util import is_empty
 
 
 table_user = Table.USER
+table_adage = Table.ADAGE
 
 
 @handler
@@ -61,6 +62,80 @@ def post(event, context):
     table_user.put_item(Item=item)
 
     return PostResponse(item)
+
+
+@handler
+def get(event, context):
+    """ユーザ参照
+
+    Returns:
+        Response: レスポンス
+    """
+    sub = event['requestContext']['authorizer']['claims']['sub']
+    user = get_user(sub)
+
+    return Response(user)
+
+
+@handler
+def put(event, context):
+    """ユーザ更新
+
+    Raises:
+        ApplicationException: ユーザが存在しない場合
+        ApplicationException: 変更する値が空の場合
+
+    Returns:
+        Response: レスポンス
+    """
+    user_id = event['requestContext']['authorizer']['claims']['sub']
+    body = json.loads(event['body'])
+    new_user_name = body.get('userName')
+
+    # ユーザが存在しない場合
+    if is_empty(user_id):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'User does not exists. userId: {user_id}',
+        )
+
+    # 変更する値が空の場合
+    if is_empty(new_user_name):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            'Parameter is empty.',
+        )
+
+    else:
+        table_user.update_item(
+            Key={
+                'userId': user_id,
+                'key': 'userId',
+            },
+            UpdateExpression='set userName=:userName',
+            ExpressionAttributeValues={
+                ':userName': new_user_name,
+            },
+        )
+
+        adages = get_adages_by_user_id(user_id)
+        print(adages)
+        for adage in adages:
+            table_adage.update_item(
+                Key={
+                    'adageId': adage['adageId'],
+                    'key': f'episode#{user_id}',
+                },
+                UpdateExpression='set userName=:userName',
+                ExpressionAttributeValues={
+                    ':userName': new_user_name,
+                },
+            )
+
+    return Response(
+        {'userName': new_user_name},
+    )
+
 
 
 @handler
@@ -244,3 +319,41 @@ def get_user_name(login_id: str) -> str:
     return '' \
         if is_empty(item.get('Items', [{}])[0].get('userName')) \
         else item['Items'][0]['userName']
+
+
+def get_user(user_id: str) -> dict:
+    """ユーザ取得
+
+    Args:
+        user_id (str): ユーザID
+
+    Returns:
+        dict: ユーザ
+    """
+    item = table_user.get_item(
+        Key={
+            'userId': user_id,
+            'key': 'userId',
+        },
+        ProjectionExpression='userName',
+    )
+
+    return {} if is_empty(item['Item']) else item['Item']
+
+
+def get_adages_by_user_id(user_id: str) -> list:
+    """ユーザIDから格言リスト取得
+
+    Args:
+        user_id (str): ユーザID
+
+    Returns:
+        list: 格言リスト
+    """
+    items = table_adage.query(
+        IndexName="userId-Index",
+        KeyConditionExpression=Key('userId').eq(user_id),
+        ProjectionExpression='adageId',
+    )
+
+    return [] if is_empty(items.get('Items')) else items['Items']

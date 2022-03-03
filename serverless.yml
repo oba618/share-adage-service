@@ -96,6 +96,26 @@ functions:
           path: /user
           method: post
           cors: true
+  userGet:
+    handler: functions/user.get
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: get
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  userPut:
+    handler: functions/user.put
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: put
+          authorizer: ${self:custom.authorizer}
+          cors: true
   userConfirm:
     handler: functions/user.confirm
     layers:
