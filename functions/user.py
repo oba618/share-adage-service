@@ -92,18 +92,25 @@ def put(event, context):
     body = json.loads(event['body'])
     new_user_name = body.get('userName')
 
-    # ユーザが存在しない場合
-    if is_empty(user_id):
-        raise ApplicationException(
-            HTTPStatus.NOT_FOUND,
-            f'User does not exists. userId: {user_id}',
-        )
-
     # 変更する値が空の場合
     if is_empty(new_user_name):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
             'Parameter is empty.',
+        )
+
+    # ユーザ名が20文字より大きい場合
+    if len(new_user_name) > 20:
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            'The number of characters is over.',
+        )
+
+    # ユーザが存在しない場合
+    if is_empty(user_id):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'User does not exists. userId: {user_id}',
         )
 
     else:
