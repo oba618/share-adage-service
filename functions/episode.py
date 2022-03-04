@@ -35,11 +35,11 @@ def post(event, context):
         )
 
     # 既存格言チェック
-    adage_title = get_adage(adage_id, 'title')
-    if is_empty(adage_title):
+    exists_adage = get_adage(adage_id, 'title')
+    if is_empty(exists_adage):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            f'Title of adage does not exists. adageId: {adage_id}',
+            f'Adage does not exists. adageId: {adage_id}',
         )
 
     # 既存ユーザチェック
@@ -54,7 +54,7 @@ def post(event, context):
             f'User does not exists. userId: {user_id}',
         )
 
-    # エピソード登録
+    # 格言IDにエピソード登録
     body = {
         'adageId': adage_id,
         'key': 'episode#' + user_id,
@@ -63,6 +63,28 @@ def post(event, context):
         'episode': episode,
     }
     table_adage.put_item(Item=body)
+
+    # ユーザIDにエピソード登録
+    post_episode_list = [] \
+        if is_empty(exists_user.get('postEpisodeList')) \
+        else exists_user['postEpisodeList']
+
+    post_episode_list.append(
+        {
+            'adageId': adage_id,
+            'title': exists_adage['title'],
+        },
+    )
+    table_user.update_item(
+        Key={
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression='set postEpisodeList=:e',
+        ExpressionAttributeValues={
+            ':e': post_episode_list,
+        },
+    )
 
     return PostResponse(body)
 
@@ -82,25 +104,27 @@ def get_adage(adage_id: str, key: str) -> dict:
             'adageId': adage_id,
             'key': key,
         },
+        ProjectionExpression='title',
     )
 
     return {} if is_empty(item.get('Item')) else item['Item']
 
 
-def get_user(sub: str) -> dict:
+def get_user(user_id: str) -> dict:
     """ユーザ取得
 
     Args:
-        sub (str): ユーザID
+        user_id (str): ユーザID
 
     Returns:
         dict: ユーザ情報
     """
     item = table_user.get_item(
         Key={
-            'userId': sub,
+            'userId': user_id,
             'key': 'userId',
         },
+        ProjectionExpression='userName,postEpisodeList',
     )
 
     return {} if is_empty(item.get('Item')) else item['Item']

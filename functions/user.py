@@ -342,7 +342,7 @@ def get_user(user_id: str) -> dict:
             'userId': user_id,
             'key': 'userId',
         },
-        ProjectionExpression='userName',
+        ProjectionExpression='userName,postEpisodeList',
     )
 
     return {} if is_empty(item['Item']) else item['Item']
