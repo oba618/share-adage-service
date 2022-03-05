@@ -71,8 +71,11 @@ def get(event, context):
     Returns:
         Response: レスポンス
     """
-    sub = event['requestContext']['authorizer']['claims']['sub']
-    user = get_user(sub)
+    user_id = event['requestContext']['authorizer']['claims']['sub']
+    user = get_user(
+        user_id,
+        ['userName', 'postEpisodeList'],
+    )
 
     return Response(user)
 
@@ -211,12 +214,18 @@ def login(event, context):
             e.response['Error']['Message'],
         )
 
+    user = get_user_by_login_id(
+        login_id,
+        ['userId', 'userName'],
+    )
+
     return PostResponse(
         {
             'idToken': response['AuthenticationResult']['IdToken'],
             'accessToken': response['AuthenticationResult']['AccessToken'],
             'refreshToken': response['AuthenticationResult']['RefreshToken'],
-            'userName': get_user_name(login_id),
+            'userId': user['userId'],
+            'userName': user['userName'],
         },
     )
 
@@ -308,31 +317,31 @@ def delete(event, context):
     return Response({})
 
 
-def get_user_name(login_id: str) -> str:
-    """ユーザ名取得
+def get_user_by_login_id(login_id: str, projection_list: list) -> dict:
+    """ログインIDからユーザ取得
 
     Args:
         login_id (str): ログインID
+        projection_list (list): 取得属性リスト
 
     Returns:
-        str: ユーザ名
+        dict: ユーザ
     """
     item = table_user.query(
         IndexName='loginId-Index',
         KeyConditionExpression=Key('loginId').eq(login_id),
-        ProjectionExpression='userName',
+        ProjectionExpression=','.join(projection_list),
     )
 
-    return '' \
-        if is_empty(item.get('Items', [{}])[0].get('userName')) \
-        else item['Items'][0]['userName']
+    return {} if is_empty(item.get('Items')) else item['Items'][0]
 
 
-def get_user(user_id: str) -> dict:
+def get_user(user_id: str, projection_list: list) -> dict:
     """ユーザ取得
 
     Args:
         user_id (str): ユーザID
+        projection_list (list): 取得属性リスト
 
     Returns:
         dict: ユーザ
@@ -342,10 +351,10 @@ def get_user(user_id: str) -> dict:
             'userId': user_id,
             'key': 'userId',
         },
-        ProjectionExpression='userName,postEpisodeList',
+        ProjectionExpression=','.join(projection_list),
     )
 
-    return {} if is_empty(item['Item']) else item['Item']
+    return {} if is_empty(item.get('Item')) else item['Item']
 
 
 def get_adages_by_user_id(user_id: str) -> list:
