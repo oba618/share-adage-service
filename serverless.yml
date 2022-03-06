@@ -86,6 +86,26 @@ functions:
           method: post
           authorizer: ${self:custom.authorizer}
           cors: true
+  episodeGetById:
+    handler: functions/episode.get_by_id
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/{adageId}/episode/{userId}
+          method: get
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  episodeDelete:
+    handler: functions/episode.delete
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /episode
+          method: delete
+          authorizer: ${self:custom.authorizer}
+          cors: true
 
   userPost:
     handler: functions/user.post

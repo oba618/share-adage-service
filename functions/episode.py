@@ -20,6 +20,11 @@ def post(event, context):
         event (dict): イベント
         context (dict): コンテキスト
 
+    Raises:
+        ApplicationException: 必須項目不足の場合
+        ApplicationException: 既存格言が存在しない場合
+        ApplicationException: 既存ユーザが存在しない場合
+
     Returns:
         Response: レスポンス
     """
@@ -47,7 +52,7 @@ def post(event, context):
     if is_empty(user_id):
         user_id = event['requestContext']['authorizer']['claims']['sub']
 
-    exists_user = get_user(user_id)
+    exists_user = get_user(user_id, ['userName'])
     if is_empty(exists_user):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
@@ -55,38 +60,92 @@ def post(event, context):
         )
 
     # 格言IDにエピソード登録
-    body = {
-        'adageId': adage_id,
-        'key': 'episode#' + user_id,
-        'userId': user_id,
-        'userName': exists_user['userName'],
-        'episode': episode,
-    }
-    table_adage.put_item(Item=body)
-
-    # ユーザIDにエピソード登録
-    post_episode_list = [] \
-        if is_empty(exists_user.get('postEpisodeList')) \
-        else exists_user['postEpisodeList']
-
-    post_episode_list.append(
-        {
+    table_adage.put_item(
+        Item={
             'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+            'userId': user_id,
+            'userName': exists_user['userName'],
             'title': exists_adage['title'],
+            'episode': episode,
         },
     )
-    table_user.update_item(
-        Key={
+
+    # ユーザIDにエピソード登録
+    table_user.put_item(
+        Item={
             'userId': user_id,
-            'key': 'userId',
-        },
-        UpdateExpression='set postEpisodeList=:e',
-        ExpressionAttributeValues={
-            ':e': post_episode_list,
+            'key': '#'.join(['episode', adage_id]),
+            'adageId': adage_id,
+            'title': exists_adage['title'],
+            'episode': episode,
         },
     )
 
     return PostResponse(body)
+
+
+@handler
+def get_by_id(event, context):
+    """格言IDに投稿したユーザのエピソードを取得
+
+    Returns:
+        Response: レスポンス
+    """
+    adage_id = event['pathParameters']['adageId']
+    user_id = event['pathParameters']['userId']
+
+    episode = get_episode_by_id(adage_id, user_id)
+
+    return Response(
+        {'episode': episode.get('episode', '')},
+    )
+
+
+@handler
+def delete(event, context):
+    """格言IDに投稿したユーザのエピソード削除
+
+    Raises:
+        ApplicationException: 必須項目不足の場合
+
+    Returns:
+        Response: レスポンス
+    """
+    body = json.loads(event['body'])
+    adage_id = body.get('adageId')
+    user_id = body.get('userId')
+
+    # 必須項目不足の場合
+    if is_empty(adage_id):
+        ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            f'adageId is required',
+        )
+
+    if is_empty(user_id):
+        ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            f'userId is required',
+        )
+
+    # 格言IDのエピソード削除
+    table_adage.delete_item(
+        Key={
+            'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+        },
+    )
+
+    # ユーザIDのエピソード削除
+    table_user.delete_item(
+        Key={
+            'userId': user_id,
+            'key': '#'.join(['episode', adage_id]),
+        },
+    )
+
+    return Response({})
 
 
 def get_adage(adage_id: str, key: str) -> dict:
@@ -110,11 +169,12 @@ def get_adage(adage_id: str, key: str) -> dict:
     return {} if is_empty(item.get('Item')) else item['Item']
 
 
-def get_user(user_id: str) -> dict:
+def get_user(user_id: str, projection_list: list) -> dict:
     """ユーザ取得
 
     Args:
         user_id (str): ユーザID
+        projection_list (list): 取得属性リスト
 
     Returns:
         dict: ユーザ情報
@@ -124,7 +184,7 @@ def get_user(user_id: str) -> dict:
             'userId': user_id,
             'key': 'userId',
         },
-        ProjectionExpression='userName,postEpisodeList',
+        ProjectionExpression=','.join(projection_list),
     )
 
     return {} if is_empty(item.get('Item')) else item['Item']
@@ -150,3 +210,17 @@ def get_user_name(user_id: str) -> str:
     user_info = {} if is_empty(item.get('Item')) else item['Item']
 
     return {} if is_empty(user_info.get('userName')) else user_info['userName']
+
+
+def get_episode_by_id(adage_id: str, user_id: str):
+    item = table_adage.get_item(
+        Key={
+            'adageId': adage_id,
+            'key': '#'.join(
+                ['episode', user_id],
+            ),
+        },
+        ProjectionExpression='episode',
+    )
+
+    return {} if is_empty(item.get('Item')) else item['Item']

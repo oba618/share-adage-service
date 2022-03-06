@@ -1,8 +1,10 @@
+import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from http import HTTPStatus
 import json
 
+from common.const import LAMBDA_STAGE
 from common.decorator import handler
 from common.exception import ApplicationException
 from common.resource import Cognito
@@ -72,10 +74,7 @@ def get(event, context):
         Response: レスポンス
     """
     user_id = event['requestContext']['authorizer']['claims']['sub']
-    user = get_user(
-        user_id,
-        ['userName', 'postEpisodeList'],
-    )
+    user = get_user_all(user_id)
 
     return Response(user)
 
@@ -277,33 +276,43 @@ def reset_password(event, context):
 
 @handler
 def delete(event, context):
-    sub = event['requestContext']['authorizer']['claims']['sub']
+    """ユーザ削除
+
+    Raises:
+        ApplicationException: ユーザが存在しない場合
+        ApplicationException: メールアドレスが違う場合
+
+    Returns:
+        Response: レスポンス
+    """
     body = json.loads(event['body'])
+    user_id = event['requestContext']['authorizer']['claims']['sub']
+    login_id = body.get('loginId')
 
-    user = table_user.get_item(
-        Key={
-            'userId': sub,
-            'key': 'userId',
-        },
-    )
+    user = get_user_all(user_id)
 
-    if is_empty(user.get('Item')):
+    # ユーザが存在しない場合
+    if is_empty(user):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            'User does not exists',
+            f'User does not exists. userId: {user_id}',
         )
 
-    login_id = body.get('loginId')
-    if not user['Item']['loginId'] == login_id:
+    # メールアドレス確認
+    if not user.get('loginId') == login_id:
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
             f'Mail address is different. address: {login_id}'
         )
 
-    # DynamoDBユーザ削除
+    # エピソード削除
+    for episode in user.get('episodeList'):
+        invoke_lambda_episode_delete(episode.get('adageId'), user_id)
+
+    # ユーザテーブル: ユーザ削除
     table_user.delete_item(
         Key={
-            'userId': user['Item']['userId'],
+            'userId': user['userId'],
             'key': 'userId',
         },
     )
@@ -357,6 +366,34 @@ def get_user(user_id: str, projection_list: list) -> dict:
     return {} if is_empty(item.get('Item')) else item['Item']
 
 
+def get_user_all(user_id: str) -> dict:
+    """ユーザ情報取得
+
+    Args:
+        user_id (str): ユーザID
+
+    Returns:
+        dict: ユーザ情報
+    """
+    user_item = table_user.get_item(
+        Key={
+            'userId': user_id,
+            'key': 'userId',
+        },
+        ProjectionExpression='userId,userName,loginId',
+    )
+
+    user_episode = table_user.query(
+        KeyConditionExpression=Key('userId').eq(user_id) &
+            Key('key').begins_with('episode'),
+        ProjectionExpression='adageId,title,episode',
+    )
+
+    user_item['Item']['episodeList'] = user_episode['Items']
+
+    return user_item['Item']
+
+
 def get_adages_by_user_id(user_id: str) -> list:
     """ユーザIDから格言リスト取得
 
@@ -373,3 +410,27 @@ def get_adages_by_user_id(user_id: str) -> list:
     )
 
     return [] if is_empty(items.get('Items')) else items['Items']
+
+
+def invoke_lambda_episode_delete(adage_id: str, user_id: str):
+    """エピソード削除関数呼び出し
+
+    Args:
+        adage_id (str): 格言ID
+        user_id (str): ユーザID
+    """
+    client = boto3.client('lambda')
+
+    client.invoke(
+        FunctionName=f'share-adage-service-{LAMBDA_STAGE}-episodeDelete',
+        Payload=json.dumps(
+            {
+                'body': json.dumps(
+                    {
+                        'adageId': adage_id,
+                        'userId': user_id,
+                    },
+                ),
+            },
+        ),
+    )

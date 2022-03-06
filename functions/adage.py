@@ -140,12 +140,12 @@ def get_adage(month: int) -> list:
 
 
 def invoke_lambda_post_episode(
-        adage_id: str, user_id: str, episode: str) -> dict:
+        adage_id: str, sub: str, episode: str) -> dict:
     """エピソード登録関数呼び出し
 
     Args:
         adage_id (str): 格言ID
-        user_id (str): ユーザID
+        sub (str): ユーザID
         episode (str): エピソード
 
     Returns:
@@ -161,7 +161,7 @@ def invoke_lambda_post_episode(
                     {
                         'adageId': adage_id,
                         'episode': episode,
-                        'userId': user_id,
+                        'userId': sub,
                     },
                 ),
             },
