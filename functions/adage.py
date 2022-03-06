@@ -1,18 +1,20 @@
 from datetime import datetime
 from decimal import Decimal
+from http import HTTPStatus
 import json
-from random import randint
 from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Key
+
+from common.const import LAMBDA_STAGE
+from common.decorator import handler
+from common.exception import ApplicationException
+from common.resource import Table
 from common.response import (
-    ErrorResponse,
     PostResponse,
     Response,
 )
-from common.decorator import handler
-from common.resource import Table
 from common.util import is_empty
 
 
@@ -22,10 +24,6 @@ table_adage = Table.ADAGE
 @handler
 def get(event, context):
     """格言を参照する
-
-    Args:
-        event (dict): イベント
-        context (__main__.LambdaContext): コンテキスト
 
     Returns:
         Response: レスポンス
@@ -41,7 +39,16 @@ def get(event, context):
             'title': adage['title'],
             'registrationMonth': int(adage['registrationMonth']),
             'likePoints': int(adage['likePoints']),
+            'episode': [],
         }
+
+        adage_episode = table_adage.query(
+            KeyConditionExpression=Key('adageId').eq(adage['adageId']) &
+                Key('key').begins_with('episode'),
+        )
+        if not is_empty(adage_episode.get('Items')):
+            body['episode'] = adage_episode['Items']
+
         _adage_list.append(body)
 
     # いいねポイントで降順にソート
@@ -57,22 +64,43 @@ def get(event, context):
 def post(event, context):
     """格言登録
 
-    Args:
-        event (dict): イベント
-        context (dict): コンテキスト
+    Raise:
+        ApplicationException: 必須項目が空の場合
 
     Returns:
         PostResponse: レスポンス
     """
-    month = datetime.now().month
+    sub = event['requestContext']['authorizer']['claims']['sub']
+    adage_id = str(uuid4())
+
     body = json.loads(event['body'])
+    adage_title = body.get('title')
+    episode = body.get('episode', '')
 
-    response = post_adage(body['title'], month)
-    print(response)
+    # 必須項目チェック
+    if is_empty(adage_title):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            'Title is required.',
+        )
 
-    return PostResponse(
-        {'title': body['title']},
-    )
+    # 格言登録
+    body = {
+        'adageId': adage_id,
+        'key': 'title',
+        'title': adage_title,
+        'likePoints': 0,
+        'registrationMonth': datetime.now().month,
+    }
+    table_adage.put_item(Item=body)
+
+    # エピソードも含まれる場合
+    if not is_empty(episode):
+        invoke_lambda_post_episode(adage_id, sub, episode)
+
+    body['episode'] = episode
+
+    return PostResponse(body)
 
 
 @handler
@@ -111,23 +139,33 @@ def get_adage(month: int) -> list:
     return [] if is_empty(item.get('Items')) else item['Items']
 
 
-def post_adage(title: str, month: int) -> dict:
-    """格言を登録
+def invoke_lambda_post_episode(
+        adage_id: str, sub: str, episode: str) -> dict:
+    """エピソード登録関数呼び出し
 
     Args:
-        title (str): タイトル
-        month (int): 今月の値
+        adage_id (str): 格言ID
+        sub (str): ユーザID
+        episode (str): エピソード
 
     Returns:
-        dict: 登録結果
+        dict: 結果
     """
-    return table_adage.put_item(
-        Item={
-            'adageId': str(uuid4()),
-            'title': title,
-            'likePoints': 0,
-            'registrationMonth': month,
-        },
+    client = boto3.client('lambda')
+
+    return client.invoke(
+        FunctionName=f'share-adage-service-{LAMBDA_STAGE}-episodePost',
+        Payload=json.dumps(
+            {
+                'body': json.dumps(
+                    {
+                        'adageId': adage_id,
+                        'episode': episode,
+                        'userId': sub,
+                    },
+                ),
+            },
+        ),
     )
 
 
@@ -140,6 +178,7 @@ def patch_adage(adage_id: str):
     return table_adage.update_item(
         Key= {
             'adageId': adage_id,
+            'key': 'title',
         },
         UpdateExpression="ADD #likePoints :increment",
         ExpressionAttributeNames={

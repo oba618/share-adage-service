@@ -2,15 +2,23 @@ Resources:
   adagesTable:
     Type: 'AWS::DynamoDB::Table'
     Properties:
-      TableName: adagesTable
+      TableName: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}adagesTable
       AttributeDefinitions:
       - AttributeName: adageId
         AttributeType: S
+      - AttributeName: key
+        AttributeType: S
       - AttributeName: registrationMonth
         AttributeType: N
+      - AttributeName: userId
+        AttributeType: S
+      - AttributeName: episode
+        AttributeType: S
       KeySchema:
       - AttributeName: adageId
         KeyType: HASH
+      - AttributeName: key
+        KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
@@ -24,19 +32,32 @@ Resources:
           ProvisionedThroughput:
             ReadCapacityUnits: 1
             WriteCapacityUnits: 1
+        - IndexName: userId-Index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: KEYS_ONLY 
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
 
   usersTable:
     Type: 'AWS::DynamoDB::Table'
     Properties:
-      TableName: usersTable
+      TableName: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}usersTable
       AttributeDefinitions:
       - AttributeName: userId
+        AttributeType: S
+      - AttributeName: key
         AttributeType: S
       - AttributeName: loginId
         AttributeType: S
       KeySchema:
       - AttributeName: userId
         KeyType: HASH
+      - AttributeName: key
+        KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
@@ -46,7 +67,9 @@ Resources:
             - AttributeName: loginId
               KeyType: HASH
           Projection:
-            ProjectionType: KEYS_ONLY
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - userName
           ProvisionedThroughput:
             ReadCapacityUnits: 1
             WriteCapacityUnits: 1
