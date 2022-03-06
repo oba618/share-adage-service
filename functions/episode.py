@@ -1,11 +1,13 @@
 from http import HTTPStatus
 import json
+from uuid import uuid4
+
 from common.decorator import handler
-from common.resource import Table
-from common.response import Response
-from common.util import is_empty
 from common.exception import ApplicationException
 from common.response import PostResponse
+from common.response import Response
+from common.resource import Table
+from common.util import is_empty
 
 
 table_adage = Table.ADAGE
@@ -29,10 +31,11 @@ def post(event, context):
         Response: レスポンス
     """
     body = json.loads(event['body'])
-
-    # 必須項目チェック
     adage_id = body.get('adageId')
     episode = body.get('episode')
+    user_id = body.get('userId')
+
+    # 必須項目チェック
     if is_empty(adage_id or episode):
         raise ApplicationException(
             HTTPStatus.FORBIDDEN,
@@ -47,40 +50,56 @@ def post(event, context):
             f'Adage does not exists. adageId: {adage_id}',
         )
 
-    # 既存ユーザチェック
-    user_id = body.get('userId')
+    # ユーザチェック
     if is_empty(user_id):
-        user_id = event['requestContext']['authorizer']['claims']['sub']
-
-    exists_user = get_user(user_id, ['userName'])
-    if is_empty(exists_user):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            f'User does not exists. userId: {user_id}',
+            'userId is required.',
         )
 
-    # 格言IDにエピソード登録
-    table_adage.put_item(
-        Item={
+    # ゲストユーザの場合
+    if user_id == 'guest':
+        user_id = '#'.join([user_id, str(uuid4())])
+        item = {
+            'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+            'userId': user_id,
+            'userName': 'ゲスト',
+            'title': exists_adage['title'],
+            'episode': episode,
+            'byGuest': True,
+        }
+        table_adage.put_item(Item=item)
+
+    else:
+        exists_user = get_user(user_id, ['userName'])
+        if is_empty(exists_user):
+            raise ApplicationException(
+                HTTPStatus.BAD_REQUEST,
+                f'User does not exists. userId: {user_id}',
+            )
+
+        # 格言IDにエピソード登録
+        item = {
             'adageId': adage_id,
             'key': '#'.join(['episode', user_id]),
             'userId': user_id,
             'userName': exists_user['userName'],
             'title': exists_adage['title'],
             'episode': episode,
-        },
-    )
+        }
+        table_adage.put_item(Item=item)
 
-    # ユーザIDにエピソード登録
-    table_user.put_item(
-        Item={
-            'userId': user_id,
-            'key': '#'.join(['episode', adage_id]),
-            'adageId': adage_id,
-            'title': exists_adage['title'],
-            'episode': episode,
-        },
-    )
+        # ユーザIDにエピソード登録
+        table_user.put_item(
+            Item={
+                'userId': user_id,
+                'key': '#'.join(['episode', adage_id]),
+                'adageId': adage_id,
+                'title': exists_adage['title'],
+                'episode': episode,
+            },
+        )
 
     return PostResponse(body)
 

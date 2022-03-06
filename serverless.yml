@@ -66,6 +66,15 @@ functions:
           method: post
           authorizer: ${self:custom.authorizer}
           cors: true
+  adagePostByGuest:
+    handler: functions/adage.post_by_guest
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/guest
+          method: post
+          cors: true
   adagePatch:
     handler: functions/adage.patch
     layers:
@@ -84,7 +93,6 @@ functions:
       - http:
           path: /episode
           method: post
-          authorizer: ${self:custom.authorizer}
           cors: true
   episodeGetById:
     handler: functions/episode.get_by_id

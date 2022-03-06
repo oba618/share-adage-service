@@ -5,7 +5,7 @@ import json
 from uuid import uuid4
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 from common.const import LAMBDA_STAGE
 from common.decorator import handler
@@ -28,11 +28,12 @@ def get(event, context):
     Returns:
         Response: レスポンス
     """
-    month = datetime.now().month
-    adage_list = get_adage(month)
+    # 今月の格言取得
+    adage_list = get_adage_by_registration_month(datetime.now().month)
 
-    # 今月の格言リストを取得
+    # 今月の格言リストを作成
     _adage_list = []
+
     for adage in adage_list: 
         body = {
             'adageId': adage['adageId'],
@@ -42,9 +43,11 @@ def get(event, context):
             'episode': [],
         }
 
+        # 格言IDのエピソードを取得
         adage_episode = table_adage.query(
             KeyConditionExpression=Key('adageId').eq(adage['adageId']) &
                 Key('key').begins_with('episode'),
+            FilterExpression=Attr('byGuest').not_exists(),
         )
         if not is_empty(adage_episode.get('Items')):
             body['episode'] = adage_episode['Items']
@@ -71,6 +74,36 @@ def post(event, context):
         PostResponse: レスポンス
     """
     sub = event['requestContext']['authorizer']['claims']['sub']
+    
+    return post_core_process(event, sub)
+
+
+@handler
+def post_by_guest(event, context):
+    """格言登録(ゲストユーザ)
+
+    Raise:
+        ApplicationException: 必須項目が空の場合
+
+    Returns:
+        PostResponse: レスポンス
+    """
+    return post_core_process(event, 'guest')
+
+
+def post_core_process(event: dict, sub: str) -> PostResponse:
+    """格言登録
+
+    Args:
+        event (dict): イベント
+        sub (str, optional): ユーザID
+
+    Raises:
+        ApplicationException: 必須項目が空の場合
+
+    Returns:
+        PostResponse: レスポンス
+    """
     adage_id = str(uuid4())
 
     body = json.loads(event['body'])
@@ -92,6 +125,11 @@ def post(event, context):
         'likePoints': 0,
         'registrationMonth': datetime.now().month,
     }
+
+    # ゲストユーザの場合
+    if sub == 'guest':
+        body['byGuest'] = True
+
     table_adage.put_item(Item=body)
 
     # エピソードも含まれる場合
@@ -123,7 +161,7 @@ def patch(event, context):
     )
 
 
-def get_adage(month: int) -> list:
+def get_adage_by_registration_month(month: int) -> list:
     """今月の格言リストを取得
 
     Args:
@@ -135,6 +173,7 @@ def get_adage(month: int) -> list:
     item = table_adage.query(
         IndexName='registrationMonth-Index',
         KeyConditionExpression=Key('registrationMonth').eq(month),
+        FilterExpression=Attr('byGuest').not_exists(),
     )
     return [] if is_empty(item.get('Items')) else item['Items']
 
