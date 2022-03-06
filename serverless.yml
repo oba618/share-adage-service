@@ -12,6 +12,7 @@ provider:
     COGNITO_CLIENT_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoClientId}
     COGNITO_USER_POOL_ID: ${self:custom.otherfile.environment.${self:provider.stage}.cognitoUserPoolId}
     TABLE_NAME_PREFIX: ${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}
+    LAMBDA_STAGE: ${self:custom.otherfile.environment.${self:provider.stage}.lambdaStage}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -85,6 +86,26 @@ functions:
           method: post
           authorizer: ${self:custom.authorizer}
           cors: true
+  episodeGetById:
+    handler: functions/episode.get_by_id
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/{adageId}/episode/{userId}
+          method: get
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  episodeDelete:
+    handler: functions/episode.delete
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /episode
+          method: delete
+          authorizer: ${self:custom.authorizer}
+          cors: true
 
   userPost:
     handler: functions/user.post
@@ -94,6 +115,26 @@ functions:
       - http:
           path: /user
           method: post
+          cors: true
+  userGet:
+    handler: functions/user.get
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: get
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  userPut:
+    handler: functions/user.put
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user
+          method: put
+          authorizer: ${self:custom.authorizer}
           cors: true
   userConfirm:
     handler: functions/user.confirm

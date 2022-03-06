@@ -6,6 +6,7 @@ from moto import (
 )
 from unittest import mock
 import yaml
+import os
 
 
 def set_up(func):
@@ -36,14 +37,23 @@ def create_tables():
     """DynamoDBモック
     """
     dynamo_db = boto3.resource('dynamodb')
+    conf_path = './serverless/dynamodb.yml'
+    serverless_prefix = '${self:custom.otherfile.environment.${self:provider.stage}.tableNamePrefix}'
+    my_stage_prefix = os.environ['TABLE_NAME_PREFIX']
 
     # 定義取得
-    with open('./conf/dynamodb.yml') as f:
+    with open(conf_path) as f:
         definitions = yaml.safe_load(f)
 
     # テーブル作成
     for definition in definitions['Resources'].values():
-        dynamo_db.create_table(**definition['Properties'])
+        definition['Properties']['TableName'] = \
+            definition['Properties']['TableName'].replace(
+                serverless_prefix,
+                my_stage_prefix,
+            )
+
+        test = dynamo_db.create_table(**definition['Properties'])
 
 
 def create_cognito() -> tuple:

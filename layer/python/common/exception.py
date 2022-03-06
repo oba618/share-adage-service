@@ -40,3 +40,45 @@ class ApplicationException(Exception):
                 message
             ],
         )
+
+
+
+class CognitoException(Exception):
+    """Cognito例外クラス
+    """
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    @property
+    def phrase(self) -> str:
+        return self._phrase
+
+    @property
+    def message(self) -> str:
+        return self._message
+
+    @property
+    def error_log(self) -> str:
+        return self._error_log
+
+    def __init__(self, http_status_code: str, message: str=''):
+        """例外オブジェクト作成
+
+        Args:
+            http_status_code (str): HTTPStatusコード
+            message (str, optional): 例外メッセージ Defaults to ''.
+        """
+        self._value = http_status_code
+        self._phrase = 'Cognito Error'
+        self._message = message
+
+        # ログ出力用
+        self._error_log = ': '.join(
+            [
+                str(self._value),
+                self._phrase,
+                message
+            ],
+        )
