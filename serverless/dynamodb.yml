@@ -12,8 +12,6 @@ Resources:
         AttributeType: N
       - AttributeName: userId
         AttributeType: S
-      - AttributeName: episode
-        AttributeType: S
       KeySchema:
       - AttributeName: adageId
         KeyType: HASH

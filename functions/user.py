@@ -1,16 +1,18 @@
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from datetime import datetime
 from http import HTTPStatus
 import json
 
-from common.const import LAMBDA_STAGE
+from common.const import JST, LAMBDA_STAGE
 from common.decorator import handler
+from common.const import SendReason
 from common.exception import ApplicationException
 from common.resource import Cognito
 from common.response import PostResponse, Response
 from common.resource import Table
-from common.util import is_empty
+from common.util import is_empty, add_point_history
 
 
 table_user = Table.USER
@@ -54,14 +56,21 @@ def post(event, context):
         Password=password,
     )
 
+    user_id = response['UserSub']
+    send_reason = SendReason.REGISTRATION_USER
+
     # ユーザ登録(dynamoDB)
     item = {
-        'userId': response['UserSub'],
+        'userId': user_id,
         'key': 'userId',
         'loginId': login_id,
         'userName': 'No name',
+        'likePoints': send_reason.point,
     }
     table_user.put_item(Item=item)
+
+    # ポイント履歴追加
+    add_point_history(user_id, send_reason)
 
     return PostResponse(item)
 
@@ -74,9 +83,39 @@ def get(event, context):
         Response: レスポンス
     """
     user_id = event['requestContext']['authorizer']['claims']['sub']
-    user = get_user_all(user_id)
 
-    return Response(user)
+    # ユーザID情報取得
+    user = get_user(
+        user_id,
+        ['userId', 'userName', 'loginId', 'likePoints'],
+    )
+
+    # 投稿エピソード取得
+    episode_list = get_user_episode_list(
+        user_id,
+        ['adageId', 'title', 'episode'],
+    )
+
+    # likePoints履歴取得
+    point_list = get_user_point_list(
+        user_id,
+        ['key', 'senderId', 'senderName', 'reason', 'point', 'dateTime'],
+    )
+    for point in point_list:
+        point['reason'] = SendReason(point['reason']).message
+        point['point'] = int(point['point'])
+        point['dateTime'] = to_dt_str(float(point['dateTime']))
+
+    return Response(
+        {
+            'userId': user['userId'],
+            'userName': user['userName'],
+            'loginId': user['loginId'],
+            'likePoints': int(user['likePoints']),
+            'episodeList': episode_list,
+            'pointList': point_list,
+        },
+    )
 
 
 @handler
@@ -93,6 +132,7 @@ def put(event, context):
     user_id = event['requestContext']['authorizer']['claims']['sub']
     body = json.loads(event['body'])
     new_user_name = body.get('userName')
+    print(new_user_name)
 
     # 変更する値が空の場合
     if is_empty(new_user_name):
@@ -289,7 +329,11 @@ def delete(event, context):
     user_id = event['requestContext']['authorizer']['claims']['sub']
     login_id = body.get('loginId')
 
-    user = get_user_all(user_id)
+    # ユーザID情報取得
+    user = get_user(
+        user_id,
+        ['userId', 'loginId'],
+    )
 
     # ユーザが存在しない場合
     if is_empty(user):
@@ -305,9 +349,30 @@ def delete(event, context):
             f'Mail address is different. address: {login_id}'
         )
 
+    # 投稿エピソード取得
+    episode_list = get_user_episode_list(
+        user_id,
+        ['adageId'],
+    )
+
     # エピソード削除
-    for episode in user.get('episodeList'):
-        invoke_lambda_episode_delete(episode.get('adageId'), user_id)
+    for episode in episode_list:
+        invoke_lambda_episode_delete(episode['adageId'], user_id)
+
+    # likePoints履歴取得
+    point_list = get_user_point_list(
+        user_id,
+        ['key'],
+    )
+
+    # likePoints履歴削除
+    for point in point_list:
+        table_user.delete_item(
+            Key={
+                'userId': user['userId'],
+                'key': point['key'],
+            },
+        )
 
     # ユーザテーブル: ユーザ削除
     table_user.delete_item(
@@ -366,32 +431,54 @@ def get_user(user_id: str, projection_list: list) -> dict:
     return {} if is_empty(item.get('Item')) else item['Item']
 
 
-def get_user_all(user_id: str) -> dict:
-    """ユーザ情報取得
+def get_user_episode_list(user_id: str, projection_list: list) -> list:
+    """投稿エピソード取得
+
+    Args:
+        user_id (str): ユーザ情報
+        projection_list (list): 取得属性リスト
+
+    Returns:
+        dict: エピソード
+    """
+    item = table_user.query(
+        KeyConditionExpression=Key('userId').eq(user_id) &
+            Key('key').begins_with('episode'),
+        ProjectionExpression=','.join(projection_list),
+    )
+
+    return [] if is_empty(item.get('Items')) else item['Items']
+
+
+def get_user_point_list(user_id: str, projection_list: list) -> list:
+    """likePoints履歴取得
 
     Args:
         user_id (str): ユーザID
+        projection_list (list): 取得属性リスト
 
     Returns:
-        dict: ユーザ情報
+        list: likePoints履歴
     """
-    user_item = table_user.get_item(
-        Key={
-            'userId': user_id,
-            'key': 'userId',
-        },
-        ProjectionExpression='userId,userName,loginId',
+    projection = ','.join(
+        [
+            '#{0}'.format(item)
+            for item in projection_list
+        ]
     )
+    expression = {
+        f'#{item}': item
+        for item in projection_list
+    }
 
-    user_episode = table_user.query(
+    item = table_user.query(
         KeyConditionExpression=Key('userId').eq(user_id) &
-            Key('key').begins_with('episode'),
-        ProjectionExpression='adageId,title,episode',
+            Key('key').begins_with('point'),
+        ProjectionExpression=projection,
+        ExpressionAttributeNames=expression,
     )
 
-    user_item['Item']['episodeList'] = user_episode['Items']
-
-    return user_item['Item']
+    return [] if is_empty(item.get('Items')) else item['Items']
 
 
 def get_adages_by_user_id(user_id: str) -> list:
@@ -434,3 +521,18 @@ def invoke_lambda_episode_delete(adage_id: str, user_id: str):
             },
         ),
     )
+
+
+def to_dt_str(time_stamp: float) -> str:
+    """タイムスタンプを日時文字列へ
+
+    Args:
+        time_stamp (float): タイムスタンプ
+
+    Returns:
+        str: 日時文字列
+    """
+    dt = datetime.fromtimestamp(time_stamp, JST)
+    dt = dt.replace(microsecond=0)
+
+    return dt.strftime('%Y-%m-%d %H:%M:%S')

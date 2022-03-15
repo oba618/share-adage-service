@@ -104,13 +104,43 @@ functions:
           method: get
           authorizer: ${self:custom.authorizer}
           cors: true
+  episodePatch:
+    handler: functions/episode.patch
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/{adageId}/episode/{userId}
+          method: patch
+          cors: true
   episodeDelete:
     handler: functions/episode.delete
     layers:
       - { Ref: CommonLambdaLayer }
     events:
       - http:
-          path: /episode
+          path: /episode/{adageId}
+          method: delete
+          authorizer: ${self:custom.authorizer}
+          cors: true
+
+  heartPost:
+    handler: functions/heart.post
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /heart/{userId}
+          method: post
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  heartHistoryDelete:
+    handler: functions/heart.delete_history
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /heart
           method: delete
           authorizer: ${self:custom.authorizer}
           cors: true
