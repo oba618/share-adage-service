@@ -105,6 +105,11 @@ def post(event, context):
             },
         )
 
+        # ユーザにポイント付与
+        send_reason = SendReason.REGISTRATION_EPISODE
+        patch_user(user_id, send_reason.point)
+        add_point_history(user_id, send_reason)
+
     return PostResponse(body)
 
 
@@ -294,3 +299,25 @@ def get_episode_by_id(adage_id: str, user_id: str):
     )
 
     return {} if is_empty(item.get('Item')) else item['Item']
+
+
+def patch_user(user_id: str, point: int):
+    """ユーザのいいねポイントを増やす
+
+    Args:
+        user_id (str): ユーザID
+        point (int): ポイント
+    """
+    return table_user.update_item(
+        Key= {
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints',
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(point),
+        },
+    )

@@ -25,7 +25,17 @@ class SendReason(IntEnum):
     SEND_HEART = (
         101,
         1,
-        'ハート送信ありがとうございます！'
+        'ハート送信ありがとうございます！',
+    )
+    REGISTRATION_ADAGE = (
+        102,
+        200,
+        '格言登録ありがとうございます！',
+    )
+    REGISTRATION_EPISODE = (
+        103,
+        200,
+        'エピソード共有ありがとうございます！',
     )
     THANK_YOU = (
         200,

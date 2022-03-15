@@ -7,7 +7,7 @@ from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 
-from common.const import LAMBDA_STAGE
+from common.const import LAMBDA_STAGE, SendReason
 from common.decorator import handler
 from common.exception import ApplicationException
 from common.resource import Table
@@ -15,7 +15,7 @@ from common.response import (
     PostResponse,
     Response,
 )
-from common.util import is_empty
+from common.util import add_point_history, is_empty
 
 
 table_adage = Table.ADAGE
@@ -137,7 +137,9 @@ def post_core_process(event: dict, sub: str) -> PostResponse:
 
     # ユーザにポイント付与
     else:
-        patch_user(sub, 100)
+        send_reason = SendReason.REGISTRATION_ADAGE
+        patch_user(sub, send_reason.point)
+        add_point_history(sub, send_reason)
 
     # 格言登録
     table_adage.put_item(Item=body)
