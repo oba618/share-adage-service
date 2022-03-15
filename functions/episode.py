@@ -1,3 +1,4 @@
+from decimal import Decimal
 from http import HTTPStatus
 import json
 from uuid import uuid4
@@ -7,7 +8,8 @@ from common.exception import ApplicationException
 from common.response import PostResponse
 from common.response import Response
 from common.resource import Table
-from common.util import is_empty
+from common.util import add_point_history, is_empty
+from common.const import SendReason
 
 
 table_adage = Table.ADAGE
@@ -68,6 +70,7 @@ def post(event, context):
             'title': exists_adage['title'],
             'episode': episode,
             'byGuest': True,
+            'likePoints': 0,
         }
         table_adage.put_item(Item=item)
 
@@ -87,6 +90,7 @@ def post(event, context):
             'userName': exists_user['userName'],
             'title': exists_adage['title'],
             'episode': episode,
+            'likePoints': 0,
         }
         table_adage.put_item(Item=item)
 
@@ -118,6 +122,54 @@ def get_by_id(event, context):
 
     return Response(
         {'episode': episode.get('episode', '')},
+    )
+
+
+@handler
+def patch(event, context):
+    """エピソード更新
+
+    Returns:
+        Response: レスポンス
+    """
+    adage_id = event['pathParameters']['adageId']
+    user_id = event['pathParameters']['userId']
+
+    # エピソードのポイント追加
+    table_adage.update_item(
+        Key= {
+            'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント追加
+    table_user.update_item(
+        Key= {
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント履歴追加
+    add_point_history(user_id, SendReason.SEND_HEART)
+
+    return Response(
+        {'episodeId': adage_id},
     )
 
 

@@ -19,6 +19,7 @@ from common.util import is_empty
 
 
 table_adage = Table.ADAGE
+table_user = Table.USER
 
 
 @handler
@@ -50,6 +51,10 @@ def get(event, context):
             FilterExpression=Attr('byGuest').not_exists(),
         )
         if not is_empty(adage_episode.get('Items')):
+
+            for episode in adage_episode['Items']:
+                episode['likePoints'] = int(episode.get('likePoints', 0))
+
             body['episode'] = adage_episode['Items']
 
         _adage_list.append(body)
@@ -130,6 +135,11 @@ def post_core_process(event: dict, sub: str) -> PostResponse:
     if sub == 'guest':
         body['byGuest'] = True
 
+    # ユーザにポイント付与
+    else:
+        patch_user(sub, 100)
+
+    # 格言登録
     table_adage.put_item(Item=body)
 
     # エピソードも含まれる場合
@@ -227,4 +237,26 @@ def patch_adage(adage_id: str):
             ":increment": Decimal(1)
         },
         ReturnValues="UPDATED_NEW"
+    )
+
+
+def patch_user(user_id: str, point: int):
+    """ユーザのいいねポイントを増やす
+
+    Args:
+        user_id (str): ユーザID
+        point (int): ポイント
+    """
+    return table_user.update_item(
+        Key= {
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints',
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(point),
+        },
     )
