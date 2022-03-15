@@ -183,9 +183,8 @@ def delete(event, context):
     Returns:
         Response: レスポンス
     """
-    body = json.loads(event['body'])
-    adage_id = body.get('adageId')
-    user_id = body.get('userId')
+    user_id = event['requestContext']['authorizer']['claims']['sub']
+    adage_id = event['pathParameters']['adageId']
 
     # 必須項目不足の場合
     if is_empty(adage_id):

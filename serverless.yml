@@ -119,10 +119,10 @@ functions:
       - { Ref: CommonLambdaLayer }
     events:
       - http:
-          path: /episode
+          path: /episode/{adageId}
           method: delete
           authorizer: ${self:custom.authorizer}
-          cors: 
+          cors: true
 
   heartPost:
     handler: functions/heart.post
