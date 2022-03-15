@@ -1,11 +1,15 @@
+from decimal import Decimal
 from http import HTTPStatus
 import json
+from uuid import uuid4
+
 from common.decorator import handler
-from common.resource import Table
-from common.response import Response
-from common.util import is_empty
 from common.exception import ApplicationException
 from common.response import PostResponse
+from common.response import Response
+from common.resource import Table
+from common.util import add_point_history, is_empty
+from common.const import SendReason
 
 
 table_adage = Table.ADAGE
@@ -29,10 +33,11 @@ def post(event, context):
         Response: レスポンス
     """
     body = json.loads(event['body'])
-
-    # 必須項目チェック
     adage_id = body.get('adageId')
     episode = body.get('episode')
+    user_id = body.get('userId')
+
+    # 必須項目チェック
     if is_empty(adage_id or episode):
         raise ApplicationException(
             HTTPStatus.FORBIDDEN,
@@ -47,40 +52,63 @@ def post(event, context):
             f'Adage does not exists. adageId: {adage_id}',
         )
 
-    # 既存ユーザチェック
-    user_id = body.get('userId')
+    # ユーザチェック
     if is_empty(user_id):
-        user_id = event['requestContext']['authorizer']['claims']['sub']
-
-    exists_user = get_user(user_id, ['userName'])
-    if is_empty(exists_user):
         raise ApplicationException(
             HTTPStatus.BAD_REQUEST,
-            f'User does not exists. userId: {user_id}',
+            'userId is required.',
         )
 
-    # 格言IDにエピソード登録
-    table_adage.put_item(
-        Item={
+    # ゲストユーザの場合
+    if user_id == 'guest':
+        user_id = '#'.join([user_id, str(uuid4())])
+        item = {
+            'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+            'userId': user_id,
+            'userName': 'ゲスト',
+            'title': exists_adage['title'],
+            'episode': episode,
+            'byGuest': True,
+            'likePoints': 0,
+        }
+        table_adage.put_item(Item=item)
+
+    else:
+        exists_user = get_user(user_id, ['userName'])
+        if is_empty(exists_user):
+            raise ApplicationException(
+                HTTPStatus.BAD_REQUEST,
+                f'User does not exists. userId: {user_id}',
+            )
+
+        # 格言IDにエピソード登録
+        item = {
             'adageId': adage_id,
             'key': '#'.join(['episode', user_id]),
             'userId': user_id,
             'userName': exists_user['userName'],
             'title': exists_adage['title'],
             'episode': episode,
-        },
-    )
+            'likePoints': 0,
+        }
+        table_adage.put_item(Item=item)
 
-    # ユーザIDにエピソード登録
-    table_user.put_item(
-        Item={
-            'userId': user_id,
-            'key': '#'.join(['episode', adage_id]),
-            'adageId': adage_id,
-            'title': exists_adage['title'],
-            'episode': episode,
-        },
-    )
+        # ユーザIDにエピソード登録
+        table_user.put_item(
+            Item={
+                'userId': user_id,
+                'key': '#'.join(['episode', adage_id]),
+                'adageId': adage_id,
+                'title': exists_adage['title'],
+                'episode': episode,
+            },
+        )
+
+        # ユーザにポイント付与
+        send_reason = SendReason.REGISTRATION_EPISODE
+        patch_user(user_id, send_reason.point)
+        add_point_history(user_id, send_reason)
 
     return PostResponse(body)
 
@@ -103,6 +131,54 @@ def get_by_id(event, context):
 
 
 @handler
+def patch(event, context):
+    """エピソード更新
+
+    Returns:
+        Response: レスポンス
+    """
+    adage_id = event['pathParameters']['adageId']
+    user_id = event['pathParameters']['userId']
+
+    # エピソードのポイント追加
+    table_adage.update_item(
+        Key= {
+            'adageId': adage_id,
+            'key': '#'.join(['episode', user_id]),
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント追加
+    table_user.update_item(
+        Key= {
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント履歴追加
+    add_point_history(user_id, SendReason.SEND_HEART)
+
+    return Response(
+        {'episodeId': adage_id},
+    )
+
+
+@handler
 def delete(event, context):
     """格言IDに投稿したユーザのエピソード削除
 
@@ -112,9 +188,8 @@ def delete(event, context):
     Returns:
         Response: レスポンス
     """
-    body = json.loads(event['body'])
-    adage_id = body.get('adageId')
-    user_id = body.get('userId')
+    user_id = event['requestContext']['authorizer']['claims']['sub']
+    adage_id = event['pathParameters']['adageId']
 
     # 必須項目不足の場合
     if is_empty(adage_id):
@@ -224,3 +299,25 @@ def get_episode_by_id(adage_id: str, user_id: str):
     )
 
     return {} if is_empty(item.get('Item')) else item['Item']
+
+
+def patch_user(user_id: str, point: int):
+    """ユーザのいいねポイントを増やす
+
+    Args:
+        user_id (str): ユーザID
+        point (int): ポイント
+    """
+    return table_user.update_item(
+        Key= {
+            'userId': user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints',
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(point),
+        },
+    )
