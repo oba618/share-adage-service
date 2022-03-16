@@ -217,6 +217,44 @@ def confirm(event, context):
 
 
 @handler
+def resend_confirm_code(event, context):
+    """認証コード再送信
+
+    Raises:
+        ApplicationException: 必須項目が空の場合
+        ApplicationException: ユーザIDが存在しない場合
+
+    Returns:
+        Response: レスポンス
+    """
+    body = json.loads(event['body'])
+    login_id = body.get('loginId')
+
+    # 必須項目が空の場合
+    if is_empty(login_id):
+        raise ApplicationException(
+            HTTPStatus.BAD_REQUEST,
+            f'loginId is required',
+        )
+
+    # ユーザID取得
+    user_id = get_user_by_login_id(login_id, ['userId'])
+
+    # ユーザIDが存在しない場合
+    if is_empty(user_id):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'loginId does not exists. loginId: {login_id}',
+        )
+
+    # 認証コード再送信
+    cognito = Cognito()
+    cognito.resend_confirmation_code(Username=login_id)
+
+    return Response({})
+
+
+@handler
 def login(event, context):
     """ユーザ認証、IDトークン発行
 

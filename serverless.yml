@@ -183,6 +183,15 @@ functions:
           path: /user/confirm
           method: post
           cors: true
+  userResendConfirmCode:
+    handler: functions/user.resend_confirm_code
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/resendConfirmCode
+          method: post
+          cors: true
   userLogin:
     handler: functions/user.login
     layers:
