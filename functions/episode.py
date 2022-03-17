@@ -131,20 +131,20 @@ def get_by_id(event, context):
 
 
 @handler
-def patch(event, context):
-    """エピソード更新
+def patch_from_guest(event, context):
+    """エピソード更新、ゲストより
 
     Returns:
         Response: レスポンス
     """
     adage_id = event['pathParameters']['adageId']
-    user_id = event['pathParameters']['userId']
+    receiver_user_id = event['pathParameters']['userId']
 
     # エピソードのポイント追加
     table_adage.update_item(
         Key= {
             'adageId': adage_id,
-            'key': '#'.join(['episode', user_id]),
+            'key': '#'.join(['episode', receiver_user_id]),
         },
         UpdateExpression="ADD #likePoints :increment",
         ExpressionAttributeNames={
@@ -158,7 +158,7 @@ def patch(event, context):
     # ユーザのポイント追加
     table_user.update_item(
         Key= {
-            'userId': user_id,
+            'userId': receiver_user_id,
             'key': 'userId',
         },
         UpdateExpression="ADD #likePoints :increment",
@@ -171,7 +171,85 @@ def patch(event, context):
     )
 
     # ユーザのポイント履歴追加
-    add_point_history(user_id, SendReason.SEND_HEART)
+    add_point_history(receiver_user_id, SendReason.THANK_YOU_FROM_GUEST)
+
+    return Response(
+        {'episodeId': adage_id},
+    )
+
+
+@handler
+def patch_from_user(event, context):
+    """エピソード更新、ユーザより
+
+    Returns:
+        Response: レスポンス
+    """
+    adage_id = event['pathParameters']['adageId']
+    receiver_user_id = event['pathParameters']['userId']
+    sender_user_id = event['pathParameters']['senderUserId']
+
+    # 格言の存在チェック
+    adage = get_adage(adage_id, 'title')
+    if is_empty(adage):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'Adage does not exists. adageId: {adage_id}',
+        )
+
+    # 受信者の存在チェック
+    receiver = get_user(receiver_user_id, ['userId'])
+    if is_empty(receiver):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'User does not exists. userId: {receiver_user_id}',
+        )
+
+    # 送信者の存在チェック
+    sender = get_user(sender_user_id, ['userId', 'userName'])
+    if is_empty(sender):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'User does not exists. userId: {sender_user_id}',
+        )
+
+    # エピソードのポイント追加
+    table_adage.update_item(
+        Key= {
+            'adageId': adage_id,
+            'key': '#'.join(['episode', receiver_user_id]),
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント追加
+    table_user.update_item(
+        Key= {
+            'userId': receiver_user_id,
+            'key': 'userId',
+        },
+        UpdateExpression="ADD #likePoints :increment",
+        ExpressionAttributeNames={
+            '#likePoints':'likePoints'
+        },
+        ExpressionAttributeValues={
+            ":increment": Decimal(1)
+        }
+    )
+
+    # ユーザのポイント履歴追加
+    add_point_history(
+        receiver_user_id,
+        SendReason.THANK_YOU,
+        sender_user_id,
+        sender['userName'],
+    )
 
     return Response(
         {'episodeId': adage_id},

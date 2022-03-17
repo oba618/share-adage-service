@@ -1,7 +1,7 @@
 from decimal import Decimal
 import json
-
 from http import HTTPStatus
+
 from common.decorator import handler
 from common.exception import ApplicationException
 from common.resource import Table
@@ -14,8 +14,36 @@ table_user = Table.USER
 
 
 @handler
-def post(event, context):
-    """ハート履歴登録
+def post_from_admin_to_me(event, context):
+    """管理人からユーザへハートを送信
+
+    Raises:
+        ApplicationException: 受信者が存在しない場合
+
+    Returns:
+        Response: レスポンス
+    """
+    sub = event['requestContext']['authorizer']['claims']['sub']
+
+    # ユーザの存在確認
+    user = get_user(sub, ['userId'])
+    if is_empty(user):
+        raise ApplicationException(
+            HTTPStatus.NOT_FOUND,
+            f'User does not exists. userId: {sub}',
+        )
+
+    # ハートを付与
+    send_reason = SendReason.THANK_YOU
+    increment_user_heart(sub, send_reason.point)
+    add_point_history(sub, send_reason)
+
+    return Response({})
+
+
+@handler
+def post_from_me_to_user(event, context):
+    """ユーザから得てのユーザへハートを送信
 
     Raises:
         ApplicationException: 送信者が存在しない場合

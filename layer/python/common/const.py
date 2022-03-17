@@ -42,3 +42,8 @@ class SendReason(IntEnum):
         1,
         'あなたに感謝します！',
     )
+    THANK_YOU_FROM_GUEST = (
+        201,
+        1,
+        'ゲストがあなたに感謝しています！',
+    )
