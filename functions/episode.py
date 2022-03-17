@@ -188,8 +188,8 @@ def delete(event, context):
     Returns:
         Response: レスポンス
     """
-    user_id = event['requestContext']['authorizer']['claims']['sub']
-    adage_id = event['pathParameters']['adageId']
+    user_id = get_user_id_from_event(event)
+    adage_id = get_adage_id_from_event(event)
 
     # 必須項目不足の場合
     if is_empty(adage_id):
@@ -321,3 +321,52 @@ def patch_user(user_id: str, point: int):
             ":increment": Decimal(point),
         },
     )
+
+
+def get_user_id_from_event(event: dict) -> str:
+    """イベント情報からユーザIDを取得
+
+    Args:
+        event (dict): イベント
+
+    Returns:
+        str: ユーザID
+    """
+    user_id = event.get('requestContext', {}).get('authorizer', {}) \
+        .get('claims', {}).get('sub', {})
+
+    if is_empty(user_id):
+        body = json.loads(event['body'])
+        user_id = body.get('userId')
+
+        if is_empty(user_id):
+            raise ApplicationException(
+                HTTPStatus.NOT_FOUND,
+                f'userId is required.',
+            )
+
+    return user_id
+
+
+def get_adage_id_from_event(event: dict) -> str:
+    """イベント情報から格言IDを取得
+
+    Args:
+        event (dict): イベント
+
+    Returns:
+        str: 格言ID
+    """
+    adage_id = event.get('pathParameters', {}).get('adageId', {})
+
+    if is_empty(adage_id):
+        body = json.loads(event['body'])
+        adage_id = body.get('adageId')
+
+        if is_empty(adage_id):
+            raise ApplicationException(
+                HTTPStatus.NOT_FOUND,
+                f'adageId is required.',
+            )
+
+    return adage_id
