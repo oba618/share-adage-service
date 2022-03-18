@@ -104,13 +104,22 @@ functions:
           method: get
           authorizer: ${self:custom.authorizer}
           cors: true
-  episodePatch:
-    handler: functions/episode.patch
+  episodePatchFromGuest:
+    handler: functions/episode.patch_from_guest
     layers:
       - { Ref: CommonLambdaLayer }
     events:
       - http:
           path: /adage/{adageId}/episode/{userId}
+          method: patch
+          cors: true
+  episodePatchFromUser:
+    handler: functions/episode.patch_from_user
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /adage/{adageId}/episode/{userId}/{senderUserId}
           method: patch
           cors: true
   episodeDelete:
@@ -124,8 +133,18 @@ functions:
           authorizer: ${self:custom.authorizer}
           cors: true
 
-  heartPost:
-    handler: functions/heart.post
+  heartPostFromAdminToMe:
+    handler: functions/heart.post_from_admin_to_me
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /heart
+          method: post
+          authorizer: ${self:custom.authorizer}
+          cors: true
+  heartPostFromMeToUser:
+    handler: functions/heart.post_from_me_to_user
     layers:
       - { Ref: CommonLambdaLayer }
     events:
@@ -181,6 +200,15 @@ functions:
     events:
       - http:
           path: /user/confirm
+          method: post
+          cors: true
+  userResendConfirmCode:
+    handler: functions/user.resend_confirm_code
+    layers:
+      - { Ref: CommonLambdaLayer }
+    events:
+      - http:
+          path: /user/resendConfirmCode
           method: post
           cors: true
   userLogin:
